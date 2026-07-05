@@ -89,6 +89,27 @@ jobs:
             -Pandroid.injected.signing.key.alias="aquameter_daily_key" \
             -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
 
+      - name: Verify release signature (fail if debug-signed)
+        working-directory: android
+        run: |
+          set -e
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n1)
+          echo "Verifying APK: $APK"
+          BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/35.0.0)
+          CERTS=$("$BUILD_TOOLS_DIR/apksigner" verify --print-certs "$APK")
+          echo "$CERTS"
+          # Guard: the Android debug keystore always uses "CN=Android Debug, O=Android, C=US".
+          if echo "$CERTS" | grep -qi "Android Debug"; then
+            echo "::error::APK is signed with the DEBUG key. Release signing failed."
+            exit 1
+          fi
+          # Guard: confirm it is our release identity.
+          if echo "$CERTS" | grep -q "AquaMeter Daily"; then
+            echo "OK: APK is signed with the AquaMeter Daily release key."
+          else
+            echo "::warning::Release certificate CN did not match 'AquaMeter Daily'. Review the printed certificate above."
+          fi
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
